@@ -104,10 +104,10 @@ def validate_sus_text(text: str) -> tuple[bool, str]:
 
 
 def sus_combo(path: str) -> int:
-    import sonolus_converters
+    import rg_converters
 
     with open(path, "r", encoding="utf-8") as f:
-        score = sonolus_converters.sus.load(f)
+        score = rg_converters.converters.sus.load(f)
     return int(score.combo_count)
 
 

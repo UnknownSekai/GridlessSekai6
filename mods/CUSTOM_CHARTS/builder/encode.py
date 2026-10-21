@@ -535,11 +535,11 @@ def _compile_jacket(
 def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, str]:
     import io
 
-    import sonolus_converters as sc
-    from sonolus_converters.notes.bpm import Bpm
-    from sonolus_converters.notes.metadata import MetaData
-    from sonolus_converters.notes.score import Score
-    from sonolus_converters.notes.single import FeverChance, FeverStart, Skill
+    import rg_converters as sc
+    from rg_converters.core.bpm import Bpm
+    from rg_converters.core.metadata import MetaData
+    from rg_converters.core.score import Score
+    from rg_converters.core.single import FeverChance, FeverStart, Skill
 
     events = (Skill, FeverStart, FeverChance)
 
@@ -548,13 +548,13 @@ def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, s
     first_bpms: list = []
     for diff, path in sus_by_diff.items():
         with open(path, "r", encoding="utf-8") as f:
-            score = sc.sus.load(f)
+            score = sc.converters.sus.load(f)
         if diff == first_diff:
             first_events = [n for n in score.notes if isinstance(n, events)]
             first_bpms = [n for n in score.notes if isinstance(n, Bpm)]
         score.notes = [n for n in score.notes if not isinstance(n, events)]
         buf = io.StringIO()
-        sc.sus.export(buf, score, skip_shift=True)
+        sc.converters.sus.export(buf, score, skip_shift=True)
         texts[diff] = _normalize_sus(buf.getvalue())
 
     if not first_bpms:
@@ -569,12 +569,12 @@ def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, s
 
     info = Score(metadata=meta, notes=list(first_bpms) + list(first_events))
     buf = io.StringIO()
-    sc.sus.export(buf, info, skip_shift=True)
+    sc.converters.sus.export(buf, info, skip_shift=True)
     texts["info"] = _normalize_sus(buf.getvalue())
 
     chart_diffs = set(sus_by_diff)
     buf = io.StringIO()
-    sc.sus.export(buf, Score(metadata=meta, notes=list(first_bpms)), skip_shift=True)
+    sc.converters.sus.export(buf, Score(metadata=meta, notes=list(first_bpms)), skip_shift=True)
     empty = _normalize_sus(buf.getvalue())
     for diff in ("easy", "normal", "hard", "expert", "master", "append"):
         if diff not in chart_diffs:
