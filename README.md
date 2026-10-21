@@ -22,7 +22,7 @@ This app is a **sandbox** for not just in-game content, but also some mods.
 
 # Downloads
 
-**[Latest Release](https://github.com/UntitledCharts/GridlessSekai6/releases/latest)** - check back here for updates!
+**[Latest Release](https://github.com/UnknownSekai/GridlessSekai6/releases/latest)** - check back here for updates!
 
 > [!TIP]
 > If you wish to be notified of updates, **👁️ Watch** the project and get emails for every release.
@@ -50,6 +50,6 @@ Refer to [INSTALL.md](INSTALL.md)
 
 # Issues
 
-Found a bug or have a suggestion? [Open an issue](https://github.com/UntitledCharts/GridlessSekai6/issues)!
+Found a bug or have a suggestion? [Open an issue](https://github.com/UnknownSekai/GridlessSekai6/issues)!
 
 Sending your logs may be useful. See [LOGS.md](LOGS.md) for more info.
