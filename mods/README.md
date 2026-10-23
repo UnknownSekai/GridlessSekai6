@@ -18,3 +18,15 @@ Do not use this mod to trick or mislead people into believing it is real gamepla
 Custom charts allow users to play custom charts in the game, offline.
 
 For more information, please see [CUSTOM CHARTS](CUSTOM_CHARTS/README.md)
+
+### Multilive
+Adds ranked and multilive gamemodes into the game, fully offline with bots. Customizable options in settings.
+
+- Multi - whether it's on or off
+- Bots Pick Songs - whether the bots should pick random songs
+- Bots Always AP - whether the bots should always AP (and choose hardest diff)
+- Instant Mode - whether to skip the lobby faked "bots joining" delay
+- No Miss Penalty - allows you to miss more than 50% of notes without disconnecting you at the end
+- Bot Plocks - whether the random bot cards can be a plock
+- Unlock Ranked - forcefully unlock ranked even if requirements not met
+- Custom in Ranked - whether custom charts should show up in ranked mode
