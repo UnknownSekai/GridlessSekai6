@@ -3,11 +3,10 @@
 Before starting, learn how to navigate with Command Prompt / Terminal / Powershell (depending on device).
 
 1. Download the entire `builder/` folder. Everything here is required (including `base/`)
-2. Install Python (python.org, recommend 3.11-3.13), Git (git-scm.com), and FFmpeg (ffmpeg.org)
-3. Ensure Python, Git, and FFmpeg are in path:
+2. Install Python (python.org, recommend 3.11-3.13), and FFmpeg (ffmpeg.org)
+3. Ensure Python and FFmpeg are in path:
   ```bash
   python --version
-  git --version
   ffmpeg -version
   ffprobe -version # part of ffmpeg
   ```
