@@ -41,7 +41,7 @@ Adds tournament mode to all songs on all difficulties into the game. Play and sa
 ### Auto-Actions
 Automatically applies actions if you lose AP or FC during a solo live. Turned off by default.
 
-FC actions will be ignored if an AP action is set.
+FC actions will be ignored if a higher AP action is set.
 
 Actions available:
 - Pause - automatically pauses the current solo live
