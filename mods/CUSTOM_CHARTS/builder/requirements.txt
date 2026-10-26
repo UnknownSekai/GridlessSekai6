@@ -1,6 +1,7 @@
-# ffmpeg and ffprobe must be on PATH (system dependency, not pip).
+# ffmpeg and ffprobe must be on PATH or next to main.py (system dependency, not pip).
+# Checked when the builder starts (deps.py); keep the versions there in sync.
 
 Pillow
-rg-converters
+rg-converters>=2.0.3
 UnityPy
 cricodecs>=1.2.0

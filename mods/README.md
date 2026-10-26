@@ -37,3 +37,17 @@ Adds ranked, multilive (both marathon and cheerful carnival) gamemodes into the 
 
 ### Tournament Mode
 Adds tournament mode to all songs on all difficulties into the game. Play and save your best results with all skills disabled.
+
+### Auto-Actions
+Automatically applies actions if you lose AP or FC during a solo live. Turned off by default.
+
+FC actions will be ignored if an AP action is set.
+
+Actions available:
+- Pause - automatically pauses the current solo live
+- Retry - automatically retries the current solo live immediately
+- Quit - automatically quits the current solo live immediately
+
+## Rhythm Game Modifications
+### Layers
+Adds support for layers in .sus files (using .usc in builder - please update your builder).

@@ -12,6 +12,9 @@ import zipfile
 from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
 
+import charts
+import deps
+
 DIFFICULTIES = ["easy", "normal", "hard", "expert", "master", "append"]
 MV_TYPES = ["ogmv", "2dmv"]
 VOCAL_TYPES = ["sekai", "original_song", "another_vocal"]
@@ -28,17 +31,10 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, creationflags=flags)
 
 
-def ffprobe_available() -> bool:
-    try:
-        return _run(["ffprobe", "-version"]).returncode == 0
-    except FileNotFoundError:
-        return False
-
-
 def media_duration(path: str) -> float | None:
     cp = _run(
         [
-            "ffprobe",
+            deps.FFPROBE,
             "-v",
             "error",
             "-show_entries",
@@ -59,7 +55,7 @@ def media_duration(path: str) -> float | None:
 def has_stream(path: str, kind: str) -> bool:
     cp = _run(
         [
-            "ffprobe",
+            deps.FFPROBE,
             "-v",
             "error",
             "-select_streams",
@@ -75,10 +71,8 @@ def has_stream(path: str, kind: str) -> bool:
 
 
 def validate_image(path: str) -> tuple[bool, str]:
-    try:
-        from PIL import Image
-    except ImportError:
-        return False, "Pillow is not installed (pip install Pillow)."
+    from PIL import Image
+
     try:
         with Image.open(path) as im:
             im.verify()
@@ -101,14 +95,6 @@ def validate_sus_text(text: str) -> tuple[bool, str]:
     if not any(ln.replace(" ", "") == "#00002:4" for ln in lines):
         return False, "missing the 4/4 time signature at measure 0 (#00002: 4)"
     return True, ""
-
-
-def sus_combo(path: str) -> int:
-    import rg_converters
-
-    with open(path, "r", encoding="utf-8") as f:
-        score = rg_converters.converters.sus.load(f)
-    return int(score.combo_count)
 
 
 def gen_double_uuid() -> str:
@@ -179,11 +165,7 @@ class App(tk.Tk):
 
         bar = ttk.Frame(self)
         bar.pack(fill="x", padx=8, pady=8)
-        self.status = tk.StringVar(
-            value="Ready."
-            if ffprobe_available()
-            else "WARNING: ffprobe not found on PATH. Audio/preview checks disabled."
-        )
+        self.status = tk.StringVar(value="Ready.")
         ttk.Label(bar, textvariable=self.status, anchor="w").pack(
             side="left", fill="x", expand=True
         )
@@ -300,11 +282,11 @@ class App(tk.Tk):
         nb.add(tab, text="Charts")
         ttk.Label(
             tab,
-            text="1-6 .sus charts. Combo is auto-derived on build.",
+            text="1-6 .sus or .usc charts. Combo is auto-derived on build.",
         ).grid(row=0, column=0, columnspan=5, sticky="w", padx=8, pady=6)
         hdr = ttk.Frame(tab)
         hdr.grid(row=1, column=0, columnspan=5, sticky="ew", padx=8)
-        for i, t in enumerate(["Difficulty", "Level (1-99)", ".sus file", "Combo", ""]):
+        for i, t in enumerate(["Difficulty", "Level (1-99)", "Chart file", "Combo", ""]):
             ttk.Label(hdr, text=t, font=("", 9, "bold")).grid(
                 row=0, column=i, sticky="w", padx=4
             )
@@ -353,7 +335,7 @@ class App(tk.Tk):
             ttk.Button(
                 self.charts_frame,
                 text="…",
-                command=lambda v=r.path, rr=r: self._pick_sus(v, rr),
+                command=lambda v=r.path, rr=r: self._pick_chart(v, rr),
             ).grid(row=i, column=3, padx=2)
             ttk.Label(self.charts_frame, textvariable=r.combo, width=7).grid(
                 row=i, column=4, padx=4
@@ -368,15 +350,13 @@ class App(tk.Tk):
             ).grid(row=i, column=5, padx=4)
         self.charts_frame.columnconfigure(2, weight=1)
 
-    def _pick_sus(self, var, row: ChartRow):
-        p = filedialog.askopenfilename(
-            filetypes=[("SUS chart", "*.sus"), ("All", "*.*")]
-        )
+    def _pick_chart(self, var, row: ChartRow):
+        p = filedialog.askopenfilename(filetypes=charts.CHART_FILETYPES)
         if not p:
             return
         var.set(p)
         try:
-            row.combo.set(str(sus_combo(p)))
+            row.combo.set(str(charts.combo(p)))
         except Exception as e:
             row.combo.set("err")
             self.status.set(f"Combo parse failed for {os.path.basename(p)}: {e}")
@@ -584,14 +564,11 @@ class App(tk.Tk):
             if not ok:
                 errs.append(f"Jacket: {msg}")
 
-        ff = ffprobe_available()
-        if (
-            need(self.track.get(), "Audio track")
-            and ff
-            and not has_stream(self.track.get(), "audio")
+        if need(self.track.get(), "Audio track") and not has_stream(
+            self.track.get(), "audio"
         ):
             errs.append("Audio track has no audio stream.")
-        if need(self.track_pre.get(), "Preview audio") and ff:
+        if need(self.track_pre.get(), "Preview audio"):
             dur = media_duration(self.track_pre.get())
             if dur is None:
                 errs.append("Preview audio: could not read duration.")
@@ -604,14 +581,17 @@ class App(tk.Tk):
         seen = set()
         rows = [r for r in self.chart_rows if r.path.get().strip()]
         if not rows:
-            errs.append("At least one .sus chart is required.")
+            errs.append("At least one .sus or .usc chart is required.")
         for r in rows:
             d = r.difficulty.get()
             if d in seen:
                 errs.append(f"Duplicate difficulty '{d}'.")
             seen.add(d)
             if not os.path.isfile(r.path.get()):
-                errs.append(f"{d}: .sus file not found.")
+                errs.append(f"{d}: chart file not found.")
+                continue
+            if charts.chart_ext(r.path.get()) not in charts.CHART_EXTS:
+                errs.append(f"{d}: chart must be a .sus or .usc file.")
                 continue
             try:
                 lvl = int(r.level.get())
@@ -621,15 +601,15 @@ class App(tk.Tk):
             if not (MIN_LEVEL <= lvl <= MAX_LEVEL):
                 errs.append(f"{d}: level must be {MIN_LEVEL}-{MAX_LEVEL}.")
             try:
-                text = open(r.path.get(), "r", encoding="utf-8").read()
+                text = charts.sus_text(r.path.get())
             except Exception as e:
-                errs.append(f"{d}: cannot read .sus ({e}).")
+                errs.append(f"{d}: cannot read the chart ({e}).")
                 continue
             ok, msg = validate_sus_text(text)
             if not ok:
                 errs.append(f"{d}: {msg}.")
             try:
-                combo = sus_combo(r.path.get())
+                combo = charts.combo_of_sus(text)
             except Exception as e:
                 errs.append(f"{d}: combo derivation failed ({e}).")
                 continue
@@ -658,7 +638,7 @@ class App(tk.Tk):
             if p:
                 if not os.path.isfile(p):
                     errs.append(f"{label}: file not found.")
-                elif ff and not has_stream(p, "video"):
+                elif not has_stream(p, "video"):
                     errs.append(f"{label}: no video stream.")
 
         def req_str(var, label):
@@ -722,11 +702,11 @@ class App(tk.Tk):
                 errs.append(f"Alt vocal {idx}: vocals are required.")
             if not au or not os.path.isfile(au):
                 errs.append(f"Alt vocal {idx}: audio file is required.")
-            elif ff and not has_stream(au, "audio"):
+            elif not has_stream(au, "audio"):
                 errs.append(f"Alt vocal {idx}: audio has no audio stream.")
             if not pv or not os.path.isfile(pv):
                 errs.append(f"Alt vocal {idx}: preview is required.")
-            elif ff:
+            else:
                 d = media_duration(pv)
                 if d is not None and d > MAX_PREVIEW_SECONDS + 0.05:
                     errs.append(
@@ -757,7 +737,7 @@ class App(tk.Tk):
                 cover_files.append((jk, f"covers/cover_jacket_{idx}" + ext_of(jk)))
 
         song_duration = None
-        if self.track.get().strip() and ffprobe_available():
+        if self.track.get().strip():
             song_duration = media_duration(self.track.get())
             if song_duration is not None:
                 song_duration = round(song_duration, 3)
@@ -875,7 +855,7 @@ class App(tk.Tk):
             z.write(data["track"], "track" + ext_of(data["track"]))
             z.write(data["track_pre"], "track_pre" + ext_of(data["track_pre"]))
             for d in data["diffs"]:
-                z.write(d["_path"], f"{d['difficulty']}.sus")
+                z.write(d["_path"], d["difficulty"] + charts.chart_ext(d["_path"]))
             if data["ogmv"]:
                 z.write(data["ogmv"], "mv" + ext_of(data["ogmv"]))
             if data["2dmv"]:
@@ -1007,17 +987,9 @@ class App(tk.Tk):
         data = self._collect()
         if not data:
             return
-        try:
-            import encode
-        except Exception as e:
-            messagebox.showerror(
-                "Compiler unavailable",
-                f"Could not load the encoder (encode.py):\n{e}\n\n"
-                "The .chart.gs6 compiler needs cricodecs, UnityPy, Pillow and ffmpeg "
-                "(see requirements.txt) plus the base bundles in the bases folder.",
-            )
-            return
-        bases = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bases")
+        import encode
+
+        bases = deps.BASES
         missing = encode.missing_bases(bases, want_mv=(data["ogmv"] or data["2dmv"]))
         if missing:
             messagebox.showerror(
@@ -1097,5 +1069,23 @@ class App(tk.Tk):
         messagebox.showerror("Compile failed", f"{msg}\n\n{tb}")
 
 
+def report_problems(found: list[str]) -> None:
+    text = (
+        "The chart builder cannot start:\n\n"
+        + "\n".join("• " + p for p in found)
+        + "\n\n"
+        + deps.FIXES
+    )
+    print(text)
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("Missing requirements", text)
+    root.destroy()
+
+
 if __name__ == "__main__":
+    found = deps.problems()
+    if found:
+        report_problems(found)
+        raise SystemExit(1)
     App().mainloop()

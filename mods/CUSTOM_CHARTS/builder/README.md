@@ -4,15 +4,17 @@ Before starting, learn how to navigate with Command Prompt / Terminal / Powershe
 
 1. Download the entire `builder/` folder. Everything here is required (including `base/`)
 2. Install Python (python.org, recommend 3.11-3.13), and FFmpeg (ffmpeg.org)
-3. Ensure Python and FFmpeg are in path:
+3. Ensure Python is in path, and FFmpeg is either in path or its `ffmpeg` and `ffprobe` executables are copied into this `builder/` folder (next to `main.py`):
   ```bash
   python --version
   ffmpeg -version
   ffprobe -version # part of ffmpeg
   ```
-4. Install dependencies (`pip install -r requirements.txt`)
+4. Install dependencies (`pip install -U -r requirements.txt`)
 5. Run the command `python main.py` (double-clicking `main.py` file might also work)
 
+## Charts
+Each difficulty can be a `.sus` or a `.usc` file. A `.usc` chart is converted to SUS when it is compiled.
 
 ## Compiled and uncompiled files
 The chart builder can output a `.zip` or a `.<platform>.chart.gs6` file. Use `Build zip...` button to export `.zip` and `Compile .chart.gs6...` to output these.

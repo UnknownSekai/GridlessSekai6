@@ -12,6 +12,9 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
+import charts
+import deps
+
 CACHE_DIR_NAME = "GS6CustomChart"
 LEAD_SILENCE_SECONDS = 9
 MV_BLACK_SECONDS = 9
@@ -51,7 +54,7 @@ def missing_bases(bases: str, want_mv: bool = False) -> list[str]:
 def _ffmpeg(cmd: list[str]) -> None:
     flags = 0x08000000 if os.name == "nt" else 0
     subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *cmd],
+        [deps.FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *cmd],
         check=True,
         creationflags=flags,
     )
@@ -532,7 +535,7 @@ def _compile_jacket(
     _write(out_bundle, _encrypt_ab(_save_as_unique_bundle(env.file)))
 
 
-def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, str]:
+def _prepare_scores(chart_by_diff: dict[str, str], first_diff: str) -> dict[str, str]:
     import io
 
     import rg_converters as sc
@@ -546,15 +549,14 @@ def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, s
     texts: dict[str, str] = {}
     first_events: list = []
     first_bpms: list = []
-    for diff, path in sus_by_diff.items():
-        with open(path, "r", encoding="utf-8") as f:
-            score = sc.converters.sus.load(f)
+    for diff, path in chart_by_diff.items():
+        score = charts.load_score(path)
         if diff == first_diff:
             first_events = [n for n in score.notes if isinstance(n, events)]
             first_bpms = [n for n in score.notes if isinstance(n, Bpm)]
         score.notes = [n for n in score.notes if not isinstance(n, events)]
         buf = io.StringIO()
-        sc.converters.sus.export(buf, score, skip_shift=True)
+        sc.converters.sus.export(buf, score, allow_layers=True)
         texts[diff] = _normalize_sus(buf.getvalue())
 
     if not first_bpms:
@@ -572,7 +574,7 @@ def _prepare_scores(sus_by_diff: dict[str, str], first_diff: str) -> dict[str, s
     sc.converters.sus.export(buf, info, skip_shift=True)
     texts["info"] = _normalize_sus(buf.getvalue())
 
-    chart_diffs = set(sus_by_diff)
+    chart_diffs = set(chart_by_diff)
     buf = io.StringIO()
     sc.converters.sus.export(buf, Score(metadata=meta, notes=list(first_bpms)), skip_shift=True)
     empty = _normalize_sus(buf.getvalue())
@@ -782,9 +784,9 @@ def compile_chart(data: dict, bases: str, out_base: str, log: Log = print) -> li
                     )
                 jacket_extras[f"jacket_s_{ident}_an_custom_{cid:02d}"] = jk
 
-        sus_by_diff = {d["difficulty"]: d["_path"] for d in data["diffs"]}
+        chart_by_diff = {d["difficulty"]: d["_path"] for d in data["diffs"]}
         log("preparing charts (strip skills/fever, build info)")
-        score_texts = _prepare_scores(sus_by_diff, data["diffs"][0]["difficulty"])
+        score_texts = _prepare_scores(chart_by_diff, data["diffs"][0]["difficulty"])
 
         bundles_manifest: list[str] = []
 
