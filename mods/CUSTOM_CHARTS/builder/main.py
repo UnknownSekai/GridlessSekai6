@@ -10,14 +10,20 @@ import tkinter as tk
 import uuid
 import zipfile
 from dataclasses import dataclass
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+from typing import TYPE_CHECKING
 
 import charts
 import deps
+import untitledcharts
+
+if TYPE_CHECKING:
+    from rg_converters.core.score import Score
 
 DIFFICULTIES = ["easy", "normal", "hard", "expert", "master", "append"]
 MV_TYPES = ["ogmv", "2dmv"]
 VOCAL_TYPES = ["sekai", "original_song", "another_vocal"]
+DEFAULT_VOCAL_TYPE = "original_song"
 MIN_LEVEL, MAX_LEVEL = 1, 99
 MAX_CHARTS = 6
 MAX_PREVIEW_SECONDS = 45.0
@@ -68,6 +74,40 @@ def has_stream(path: str, kind: str) -> bool:
         ]
     )
     return cp.returncode == 0 and kind in cp.stdout
+
+
+PREVIEW_FADE_SECONDS = 2.0
+
+
+def fit_preview(src: str, folder: str) -> str:
+    """`src` when it is short enough for a preview, else its first 45s cut to FLAC."""
+    dur = media_duration(src)
+    if dur is None:
+        raise ValueError(f"could not read the duration of {os.path.basename(src)}")
+    if dur <= MAX_PREVIEW_SECONDS:
+        return src
+    dst = os.path.join(folder, "track_pre.flac")
+    fade_at = MAX_PREVIEW_SECONDS - PREVIEW_FADE_SECONDS
+    cp = _run(
+        [
+            deps.FFMPEG,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            src,
+            "-vn",
+            "-t",
+            f"{MAX_PREVIEW_SECONDS:g}",
+            "-af",
+            f"afade=t=out:st={fade_at:g}:d={PREVIEW_FADE_SECONDS:g}",
+            dst,
+        ]
+    )
+    if cp.returncode != 0:
+        raise RuntimeError(f"ffmpeg could not cut the preview: {cp.stderr.strip()}")
+    return dst
 
 
 def validate_image(path: str) -> tuple[bool, str]:
@@ -125,6 +165,7 @@ class ChartRow:
     level: tk.StringVar
     path: tk.StringVar
     combo: tk.StringVar
+    lenient_path: str = ""
 
 
 @dataclass
@@ -174,6 +215,11 @@ class App(tk.Tk):
             side="right", padx=6
         )
         ttk.Button(bar, text="Import .zip…", command=self.import_zip).pack(side="right")
+        ttk.Button(
+            bar,
+            text="Import from UntitledCharts…",
+            command=self.import_untitledcharts,
+        ).pack(side="right", padx=6)
 
         self._add_chart_row()
 
@@ -282,7 +328,7 @@ class App(tk.Tk):
         nb.add(tab, text="Charts")
         ttk.Label(
             tab,
-            text="1-6 .sus or .usc charts. Combo is auto-derived on build.",
+            text=f"1-6 charts: {charts.CHART_TYPES_TEXT}. Combo is auto-derived on build.",
         ).grid(row=0, column=0, columnspan=5, sticky="w", padx=8, pady=6)
         hdr = ttk.Frame(tab)
         hdr.grid(row=1, column=0, columnspan=5, sticky="ew", padx=8)
@@ -355,11 +401,48 @@ class App(tk.Tk):
         if not p:
             return
         var.set(p)
+        self._update_combo(row)
+
+    def _update_combo(self, row: ChartRow) -> Score | None:
+        p = row.path.get()
         try:
-            row.combo.set(str(charts.combo(p)))
+            score = self._load_row(row, row.difficulty.get())
+            row.combo.set(str(charts.note_count(score)))
+            return score
+        except charts.UnsupportedFeatures:
+            row.combo.set("err")
+            self.status.set(
+                f"{os.path.basename(p)} uses unsupported Next SEKAI features (not accepted)."
+            )
         except Exception as e:
             row.combo.set("err")
             self.status.set(f"Combo parse failed for {os.path.basename(p)}: {e}")
+        return None
+
+    def _load_row(self, row: ChartRow, label: str) -> Score:
+        """Load strictly; on unsupported Next SEKAI features ask once per file to load leniently."""
+        path = row.path.get()
+        if row.lenient_path == path:
+            return charts.load_score(path, strict=False)
+        try:
+            return charts.load_score(path)
+        except charts.UnsupportedFeatures as e:
+            if not self._accept_unsupported(label, e):
+                raise
+        row.lenient_path = path
+        return charts.load_score(path, strict=False)
+
+    def _accept_unsupported(self, label: str, e: charts.UnsupportedFeatures) -> bool:
+        shown = e.features[:20]
+        more = len(e.features) - len(shown)
+        return messagebox.askyesno(
+            "Unsupported Next SEKAI features",
+            f"{label}: {os.path.basename(e.path)} uses features the converter does not support:\n\n"
+            + "\n".join("• " + f for f in shown)
+            + (f"\n• … and {more} more" if more > 0 else "")
+            + "\n\nContinue anyway? Unsupported parts are skipped or replaced with the "
+            "closest supported equivalent.",
+        )
 
     def _build_metadata_tab(self, nb):
         tab = ttk.Frame(nb, padding=8)
@@ -388,9 +471,9 @@ class App(tk.Tk):
                 row=row[0], column=1, sticky="ew", padx=4, pady=3
             )
             if hint:
-                ttk.Label(tab, text=hint, foreground="#888").grid(
-                    row=row[0], column=2, sticky="w", padx=4
-                )
+                ttk.Label(
+                    tab, text=hint, foreground="#888", wraplength=320, justify="left"
+                ).grid(row=row[0], column=2, sticky="w", padx=4)
             row[0] += 1
 
         str_field("Title*", self.title_t)
@@ -404,8 +487,16 @@ class App(tk.Tk):
             tab, text="Full-length (not a game-size cut)", variable=self.is_full
         ).grid(row=row[0], column=1, sticky="w", padx=4, pady=3)
         row[0] += 1
-        str_field("offset_ms", self.offset_ms, "chart timing offset (int)")
-        str_field("additional_mv_offset_ms", self.mv_offset_ms, "extra MV offset (int)")
+        str_field(
+            "offset_ms",
+            self.offset_ms,
+            "global chart timing offset (int) (applies to all difficulties)",
+        )
+        str_field(
+            "additional_mv_offset_ms",
+            self.mv_offset_ms,
+            "global extra MV offset (int) (applies to all difficulties)",
+        )
         str_field("original (URL)", self.original, "optional")
         str_field("Collab (optional)", self.collab)
         tab.columnconfigure(1, weight=1)
@@ -425,7 +516,7 @@ class App(tk.Tk):
         ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
 
         self.default_vocal_name = tk.StringVar()
-        self.default_vocal_type = tk.StringVar(value="sekai")
+        self.default_vocal_type = tk.StringVar(value=DEFAULT_VOCAL_TYPE)
         df = ttk.LabelFrame(tab, text="Default vocal (uses the main track)", padding=6)
         df.grid(row=1, column=0, columnspan=4, sticky="ew", pady=4)
         ttk.Label(df, text="Name").grid(row=0, column=0, sticky="e", padx=4)
@@ -453,7 +544,7 @@ class App(tk.Tk):
             AltVocal(
                 name=tk.StringVar(),
                 vocals=tk.StringVar(),
-                vocal_type=tk.StringVar(value="original_song"),
+                vocal_type=tk.StringVar(value=DEFAULT_VOCAL_TYPE),
                 audio=tk.StringVar(),
                 preview=tk.StringVar(),
                 jacket=tk.StringVar(),
@@ -581,17 +672,20 @@ class App(tk.Tk):
         seen = set()
         rows = [r for r in self.chart_rows if r.path.get().strip()]
         if not rows:
-            errs.append("At least one .sus or .usc chart is required.")
+            errs.append("At least one chart is required.")
         for r in rows:
             d = r.difficulty.get()
+            path = r.path.get()
             if d in seen:
                 errs.append(f"Duplicate difficulty '{d}'.")
             seen.add(d)
-            if not os.path.isfile(r.path.get()):
+            if not os.path.isfile(path):
                 errs.append(f"{d}: chart file not found.")
                 continue
-            if charts.chart_ext(r.path.get()) not in charts.CHART_EXTS:
-                errs.append(f"{d}: chart must be a .sus or .usc file.")
+            try:
+                fmt = charts.chart_format(path)
+            except (OSError, ValueError) as e:
+                errs.append(f"{d}: {e}.")
                 continue
             try:
                 lvl = int(r.level.get())
@@ -600,22 +694,32 @@ class App(tk.Tk):
                 continue
             if not (MIN_LEVEL <= lvl <= MAX_LEVEL):
                 errs.append(f"{d}: level must be {MIN_LEVEL}-{MAX_LEVEL}.")
+            if fmt == "sus":
+                try:
+                    text = charts.sus_text(path)
+                except Exception as e:
+                    errs.append(f"{d}: cannot read the chart ({e}).")
+                    continue
+                ok, msg = validate_sus_text(text)
+                if not ok:
+                    errs.append(f"{d}: {msg}.")
             try:
-                text = charts.sus_text(r.path.get())
-            except Exception as e:
-                errs.append(f"{d}: cannot read the chart ({e}).")
+                combo = charts.note_count(self._load_row(r, d))
+            except charts.UnsupportedFeatures:
+                errs.append(f"{d}: the chart uses unsupported Next SEKAI features.")
                 continue
-            ok, msg = validate_sus_text(text)
-            if not ok:
-                errs.append(f"{d}: {msg}.")
-            try:
-                combo = charts.combo_of_sus(text)
             except Exception as e:
-                errs.append(f"{d}: combo derivation failed ({e}).")
+                errs.append(f"{d}: cannot load the chart ({e}).")
                 continue
             r.combo.set(str(combo))
             diffs.append(
-                {"difficulty": d, "level": lvl, "notes": combo, "_path": r.path.get()}
+                {
+                    "difficulty": d,
+                    "level": lvl,
+                    "notes": combo,
+                    "_path": path,
+                    "_lenient": r.lenient_path == path,
+                }
             )
 
         og_mv = next(
@@ -868,7 +972,7 @@ class App(tk.Tk):
             return None
         for root, _dirs, files in os.walk(self._import_tmp):
             for fn in files:
-                if os.path.splitext(fn)[0] == stem:
+                if fn.split(".", 1)[0] == stem:
                     return os.path.join(root, fn)
         return None
 
@@ -958,7 +1062,7 @@ class App(tk.Tk):
 
         self.alt_vocals.clear()
         self.default_vocal_name.set("")
-        self.default_vocal_type.set("sekai")
+        self.default_vocal_type.set(DEFAULT_VOCAL_TYPE)
         for c in info.get("covers", []):
             if c.get("default"):
                 self.default_vocal_name.set(one(c.get("name")))
@@ -982,6 +1086,123 @@ class App(tk.Tk):
                     )
                 )
         self._redraw_vocals()
+
+    def import_untitledcharts(self) -> None:
+        url = simpledialog.askstring(
+            "Import from UntitledCharts",
+            f"Level link (e.g. {untitledcharts.LINK_EXAMPLE}):",
+            parent=self,
+        )
+        if not url or not url.strip():
+            return
+        try:
+            name = untitledcharts.level_name(url)
+        except ValueError as e:
+            messagebox.showerror("Not an UntitledCharts level link", str(e))
+            return
+        folder = os.path.join(deps.HERE, "untitledcharts", name)
+
+        import threading
+
+        self.status.set(f"Importing {name} from UntitledCharts…")
+        self.config(cursor="watch")
+
+        def log(msg: str) -> None:
+            self.after(0, self.status.set, msg)
+
+        def worker() -> None:
+            try:
+                level = untitledcharts.download_level(name, folder, log)
+                log("Checking the downloaded files…")
+                if not has_stream(level.bgm, "audio"):
+                    raise ValueError("the song file has no audio stream")
+                ok, msg = validate_image(level.cover)
+                if not ok:
+                    raise ValueError(f"cover: {msg}")
+                preview = fit_preview(level.preview or level.bgm, folder)
+                offset_ms = charts.offset_ms_for(charts.load_score(level.chart, strict=False))
+            except Exception as e:
+                self.after(0, self._untitledcharts_failed, str(e))
+                return
+            self.after(0, self._untitledcharts_done, level, preview, offset_ms)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _untitledcharts_failed(self, msg: str) -> None:
+        self.config(cursor="")
+        self.status.set(f"UntitledCharts import failed: {(msg.splitlines() or [''])[0]}")
+        messagebox.showerror("UntitledCharts import failed", msg)
+
+    def _untitledcharts_done(
+        self, level: untitledcharts.Level, preview: str, offset_ms: int
+    ) -> None:
+        self.config(cursor="")
+        self._new_project()
+        self.title_t.set(level.title)
+        self.artist.set(level.artists)
+        self.charter.set(level.author)
+        self.jacket.set(level.cover)
+        self.track.set(level.bgm)
+        self.track_pre.set(preview)
+        self.offset_ms.set(str(offset_ms))
+        lvl = min(max(level.rating or MIN_LEVEL, MIN_LEVEL), MAX_LEVEL)
+        row = ChartRow(
+            difficulty=tk.StringVar(value="master"),
+            level=tk.StringVar(value=str(lvl)),
+            path=tk.StringVar(value=level.chart),
+            combo=tk.StringVar(value="-"),
+        )
+        self.chart_rows.append(row)
+        self._redraw_charts()
+        if self._update_combo(row) is not None:
+            self.status.set(f"Imported {level.title} from UntitledCharts.")
+        cut = (
+            f"\n\nThe preview was cut to the first {MAX_PREVIEW_SECONDS:.0f}s of the "
+            f"{'song' if not level.preview else 'level preview'}; replace it if you like."
+            if preview != (level.preview or level.bgm)
+            else ""
+        )
+        offset = (
+            f"\n\noffset_ms was set to {offset_ms} from the level's bgmOffset."
+            if offset_ms
+            else ""
+        )
+        messagebox.showinfo(
+            "Imported",
+            f"Imported '{level.title}' from {untitledcharts.level_page(level.name)}\n\n"
+            f"Files saved to:\n{level.folder}{cut}{offset}\n\n"
+            "Check the difficulty and level on the Charts tab, then fill in the remaining "
+            "required metadata (Lyricist, Composer, Arranger, Vocals) before building.",
+        )
+
+    def _new_project(self) -> None:
+        for var in (
+            self.jacket,
+            self.track,
+            self.track_pre,
+            self.title_t,
+            self.charter,
+            self.lyricist,
+            self.composer,
+            self.arranger,
+            self.artist,
+            self.vocals,
+            self.collab,
+            self.original,
+            self.default_vocal_name,
+        ):
+            var.set("")
+        self.is_full.set(True)
+        self.offset_ms.set("0")
+        self.mv_offset_ms.set("0")
+        self.default_vocal_type.set(DEFAULT_VOCAL_TYPE)
+        self.identifier.set(gen_double_uuid())
+        self.mv_rows.clear()
+        self._redraw_mv()
+        self.alt_vocals.clear()
+        self._redraw_vocals()
+        self.chart_rows.clear()
+        self._redraw_charts()
 
     def compile_gs6(self):
         data = self._collect()

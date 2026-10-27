@@ -535,7 +535,9 @@ def _compile_jacket(
     _write(out_bundle, _encrypt_ab(_save_as_unique_bundle(env.file)))
 
 
-def _prepare_scores(chart_by_diff: dict[str, str], first_diff: str) -> dict[str, str]:
+def _prepare_scores(
+    chart_by_diff: dict[str, str], first_diff: str, lenient: set[str]
+) -> dict[str, str]:
     import io
 
     import rg_converters as sc
@@ -550,14 +552,14 @@ def _prepare_scores(chart_by_diff: dict[str, str], first_diff: str) -> dict[str,
     first_events: list = []
     first_bpms: list = []
     for diff, path in chart_by_diff.items():
-        score = charts.load_score(path)
+        score = charts.load_score(path, strict=diff not in lenient)
         if diff == first_diff:
             first_events = [n for n in score.notes if isinstance(n, events)]
             first_bpms = [n for n in score.notes if isinstance(n, Bpm)]
         score.notes = [n for n in score.notes if not isinstance(n, events)]
-        buf = io.StringIO()
-        sc.converters.sus.export(buf, score, allow_layers=True)
-        texts[diff] = _normalize_sus(buf.getvalue())
+        texts[diff] = charts.leveldata_text(
+            score, from_sus=charts.chart_format(path) == "sus"
+        )
 
     if not first_bpms:
         first_bpms = [Bpm(beat=0.0, bpm=120.0)]
@@ -785,8 +787,11 @@ def compile_chart(data: dict, bases: str, out_base: str, log: Log = print) -> li
                 jacket_extras[f"jacket_s_{ident}_an_custom_{cid:02d}"] = jk
 
         chart_by_diff = {d["difficulty"]: d["_path"] for d in data["diffs"]}
+        lenient = {d["difficulty"] for d in data["diffs"] if d.get("_lenient")}
         log("preparing charts (strip skills/fever, build info)")
-        score_texts = _prepare_scores(chart_by_diff, data["diffs"][0]["difficulty"])
+        score_texts = _prepare_scores(
+            chart_by_diff, data["diffs"][0]["difficulty"], lenient
+        )
 
         bundles_manifest: list[str] = []
 

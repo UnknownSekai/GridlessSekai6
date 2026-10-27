@@ -12,7 +12,7 @@ BASES = os.path.join(HERE, "bases")
 # (pip name, import name, minimum version); keep in sync with requirements.txt
 PACKAGES: list[tuple[str, str, tuple[int, ...] | None]] = [
     ("Pillow", "PIL", None),
-    ("rg-converters", "rg_converters", (2, 0, 3)),
+    ("rg-converters", "rg_converters", (2, 1, 2)),
     ("UnityPy", "UnityPy", None),
     ("cricodecs", "cricodecs", (1, 2, 0)),
 ]
@@ -71,5 +71,5 @@ def problems() -> list[str]:
 FIXES = (
     "Install the Python packages with:  pip install -U -r requirements.txt\n"
     "Install FFmpeg (ffmpeg.org) and put it on PATH, or copy ffmpeg and ffprobe next to main.py.\n"
-    "The bases folder ships with the builder: download the whole builder folder."
+    "The bases folder is required, download the whole builder folder."
 )

@@ -2,6 +2,6 @@
 # Checked when the builder starts (deps.py); keep the versions there in sync.
 
 Pillow
-rg-converters>=2.0.3
+rg-converters>=2.1.2
 UnityPy
 cricodecs>=1.2.0

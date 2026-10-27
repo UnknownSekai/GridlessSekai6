@@ -30,10 +30,10 @@ Adds ranked, multilive (both marathon and cheerful carnival) gamemodes into the 
 - Always My Song - whether to always choose your song (even if bots pick songs)
 - No Miss Penalty - allows you to miss more than 50% of notes without disconnecting you at the end
 - Bot Plocks - whether the random bot cards can be a plock
-- Custom in Ranked - whether custom charts should show up in ranked mode
-- Custom in CC - whether custom charts should show up in cheerful carnival
 - Cheerful Carnival - whether to play in cheerful carnival or marathon mode
 - CC Team - which team you'd like to be on in Cheerful Carnival mode
+- Limited/Custom Songs in Ranked - how custom/limited songs should show up in Ranked
+- Limited/Custom Songs in CC - how custom/limited songs should show up in Cheerful Carnival
 
 ### Tournament Mode
 Adds tournament mode to all songs on all difficulties into the game. Play and save your best results with all skills disabled.
@@ -49,5 +49,38 @@ Actions available:
 - Quit - automatically quits the current solo live immediately
 
 ## Rhythm Game Modifications
+Adds new features to the rhythm game.
+### NXSK Level Format
+Adds support for the Next SEKAI Sonolus engine's LevelData format.
+
 ### Layers
-Adds support for layers in .sus files (using .usc in builder - please update your builder).
+Adds support for layers.
+
+### Extended Lanes
+Adds support for extended lanes.
+
+### Damage Notes
+Adds support for damage notes.
+
+### More Colored Guides
+Adds support for more guide colors.
+
+### Decimal Lanes
+Adds support for decimal lanes.
+
+### Fake Notes
+Adds support for fake notes.
+
+## Official Bug Fixes
+Fixes official game bugs.
+### Cheerful Carnival CR詠ZY Bug
+Fixes the CR詠ZY bug found in Cheerful Carnival. See screenshot below.
+![Screenshot of game with the CRAZY bug](crazy_bug.png)
+
+Occurs when a chart does not have FEVER.
+
+### 9,999 Max Combo
+Fixes combo rendering past 9,999 combo, where only 4 digits will ever render. Extended to 7 digits.
+
+### Negative Hispeed Slide Heads
+Fixes slide heads rendering on the judgement line in negative hispeed because the game assumes the slider is already past the judgement line while it's moving backwards.
