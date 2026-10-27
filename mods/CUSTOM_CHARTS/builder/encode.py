@@ -556,7 +556,6 @@ def _prepare_scores(
         if diff == first_diff:
             first_events = [n for n in score.notes if isinstance(n, events)]
             first_bpms = [n for n in score.notes if isinstance(n, Bpm)]
-        score.notes = [n for n in score.notes if not isinstance(n, events)]
         texts[diff] = charts.leveldata_text(
             score, from_sus=charts.chart_format(path) == "sus"
         )
@@ -788,7 +787,7 @@ def compile_chart(data: dict, bases: str, out_base: str, log: Log = print) -> li
 
         chart_by_diff = {d["difficulty"]: d["_path"] for d in data["diffs"]}
         lenient = {d["difficulty"] for d in data["diffs"] if d.get("_lenient")}
-        log("preparing charts (strip skills/fever, build info)")
+        log("preparing charts (skills/fever kept in each chart and copied to info)")
         score_texts = _prepare_scores(
             chart_by_diff, data["diffs"][0]["difficulty"], lenient
         )

@@ -10,25 +10,27 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from rg_converters.core.score import Score
 
-ChartFormat = Literal["sus", "usc", "next_sekai"]
+ChartFormat = Literal["sus", "usc", "next_sekai", "chart_cyanvas"]
 
 LEVELDATA_EXTS = (".json.gz", ".json", ".nsld", ".gz")
 CHART_EXTS = (".sus", ".usc", *LEVELDATA_EXTS)
-CHART_TYPES_TEXT = ".sus, .usc or Next SEKAI LevelData (.json, .json.gz, .nsld, .gz)"
+CHART_TYPES_TEXT = ".sus, .usc or Next SEKAI / Chart Cyanvas LevelData (.json, .json.gz, .nsld, .gz)"
 CHART_FILETYPES = [
-    ("Chart (SUS / USC / Next SEKAI)", "*.sus *.usc *.json *.gz *.nsld"),
+    ("Chart (SUS / USC / LevelData)", "*.sus *.usc *.json *.gz *.nsld"),
     ("SUS chart", "*.sus"),
     ("USC chart", "*.usc"),
-    ("Next SEKAI LevelData", "*.json *.gz *.nsld"),
+    ("Next SEKAI / Chart Cyanvas LevelData", "*.json *.gz *.nsld"),
     ("All", "*.*"),
 ]
+FORMAT_NAMES = {"next_sekai": "Next SEKAI", "chart_cyanvas": "Chart Cyanvas"}
 
 
 class UnsupportedFeatures(ValueError):
-    """Next SEKAI LevelData that only loads with error_on_unsupported_feature=False."""
+    """LevelData that only loads with error_on_unsupported_feature=False."""
 
-    def __init__(self, path: str, features: list[str]):
-        super().__init__(f"{os.path.basename(path)} uses unsupported Next SEKAI features")
+    def __init__(self, path: str, features: list[str], fmt: ChartFormat = "next_sekai"):
+        self.format_name = FORMAT_NAMES.get(fmt, fmt)
+        super().__init__(f"{os.path.basename(path)} uses unsupported {self.format_name} features")
         self.path = path
         self.features = features
 
@@ -51,6 +53,16 @@ def is_leveldata(head: bytes) -> bool:
     return head.lstrip()[:1] == b"{"
 
 
+def leveldata_format(raw: bytes) -> ChartFormat:
+    """Chart Cyanvas or Next SEKAI LevelData, by its archetypes (Next SEKAI when it can't tell)."""
+    from rg_converters.converters.LevelData import detect
+
+    if raw.startswith(codecs.BOM_UTF8):
+        raw = raw[len(codecs.BOM_UTF8) :]
+    kind = detect(raw, skip_gzip=raw[:2] != b"\x1f\x8b")
+    return "chart_cyanvas" if kind == "chcy" else "next_sekai"
+
+
 def chart_format(path: str) -> ChartFormat:
     ext = chart_ext(path)
     if ext == ".sus":
@@ -59,12 +71,12 @@ def chart_format(path: str) -> ChartFormat:
         return "usc"
     if ext in LEVELDATA_EXTS:
         with open(path, "rb") as f:
-            head = f.read(64)
-        if not is_leveldata(head):
+            raw = f.read()
+        if not is_leveldata(raw[:64]):
             raise ValueError(
-                f"{os.path.basename(path)} is not Next SEKAI LevelData (expected gzip or a JSON object)"
+                f"{os.path.basename(path)} is not LevelData (expected gzip or a JSON object)"
             )
-        return "next_sekai"
+        return leveldata_format(raw)
     raise ValueError(f"unsupported chart type '{ext}' (use {CHART_TYPES_TEXT})")
 
 
@@ -76,7 +88,7 @@ def _check_leveldata(raw: bytes) -> None:
             raise ValueError(f"cannot decompress the LevelData: {e}") from e
     data = json.loads(raw.decode("utf-8-sig"))
     if not isinstance(data, dict) or not isinstance(data.get("entities"), list):
-        raise ValueError("not Next SEKAI LevelData (no entities list)")
+        raise ValueError("not LevelData (no entities list)")
 
 
 def _feature_lines(message: str) -> list[str]:
@@ -85,24 +97,32 @@ def _feature_lines(message: str) -> list[str]:
 
 
 def load_score(path: str, strict: bool = True) -> Score:
-    """Load any supported chart; `strict` only applies to Next SEKAI LevelData."""
-    fmt = chart_format(path)
-    if fmt == "next_sekai":
-        from rg_converters.converters.LevelData import next_sekai
+    """Load any supported chart; `strict` only applies to LevelData."""
+    ext = chart_ext(path)
+    if ext in LEVELDATA_EXTS:
+        from rg_converters.converters.LevelData import chart_cyanvas, next_sekai
 
         with open(path, "rb") as f:
             raw = f.read()
+        if not is_leveldata(raw[:64]):
+            raise ValueError(
+                f"{os.path.basename(path)} is not LevelData (expected gzip or a JSON object)"
+            )
         _check_leveldata(raw)
         if raw.startswith(codecs.BOM_UTF8):
             raw = raw[len(codecs.BOM_UTF8) :]
+        fmt = leveldata_format(raw)
         try:
+            if fmt == "chart_cyanvas":
+                return chart_cyanvas.load(raw, error_on_unsupported_feature=strict)
             return next_sekai.load(
                 raw,
                 error_on_unsupported_feature=strict,
                 attempt_attached_note_convert=True,
             )
-        except next_sekai.UnsupportedFeatureError as e:
-            raise UnsupportedFeatures(path, _feature_lines(str(e))) from e
+        except (next_sekai.UnsupportedFeatureError, chart_cyanvas.UnsupportedFeatureError) as e:
+            raise UnsupportedFeatures(path, _feature_lines(str(e)), fmt) from e
+    fmt = chart_format(path)
 
     from rg_converters.converters import sus, usc
 

@@ -11,8 +11,10 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from tkinter import filedialog, messagebox, simpledialog, ttk
+from types import ModuleType
 from typing import TYPE_CHECKING
 
+import ccarchive
 import charts
 import deps
 import untitledcharts
@@ -220,6 +222,11 @@ class App(tk.Tk):
             text="Import from UntitledCharts…",
             command=self.import_untitledcharts,
         ).pack(side="right", padx=6)
+        ttk.Button(
+            bar,
+            text="Import from CC Archive…",
+            command=self.import_ccarchive,
+        ).pack(side="right")
 
         self._add_chart_row()
 
@@ -409,10 +416,10 @@ class App(tk.Tk):
             score = self._load_row(row, row.difficulty.get())
             row.combo.set(str(charts.note_count(score)))
             return score
-        except charts.UnsupportedFeatures:
+        except charts.UnsupportedFeatures as e:
             row.combo.set("err")
             self.status.set(
-                f"{os.path.basename(p)} uses unsupported Next SEKAI features (not accepted)."
+                f"{os.path.basename(p)} uses unsupported {e.format_name} features (not accepted)."
             )
         except Exception as e:
             row.combo.set("err")
@@ -420,7 +427,7 @@ class App(tk.Tk):
         return None
 
     def _load_row(self, row: ChartRow, label: str) -> Score:
-        """Load strictly; on unsupported Next SEKAI features ask once per file to load leniently."""
+        """Load strictly; on unsupported LevelData features ask once per file to load leniently."""
         path = row.path.get()
         if row.lenient_path == path:
             return charts.load_score(path, strict=False)
@@ -436,7 +443,7 @@ class App(tk.Tk):
         shown = e.features[:20]
         more = len(e.features) - len(shown)
         return messagebox.askyesno(
-            "Unsupported Next SEKAI features",
+            f"Unsupported {e.format_name} features",
             f"{label}: {os.path.basename(e.path)} uses features the converter does not support:\n\n"
             + "\n".join("• " + f for f in shown)
             + (f"\n• … and {more} more" if more > 0 else "")
@@ -705,8 +712,8 @@ class App(tk.Tk):
                     errs.append(f"{d}: {msg}.")
             try:
                 combo = charts.note_count(self._load_row(r, d))
-            except charts.UnsupportedFeatures:
-                errs.append(f"{d}: the chart uses unsupported Next SEKAI features.")
+            except charts.UnsupportedFeatures as e:
+                errs.append(f"{d}: the chart uses unsupported {e.format_name} features.")
                 continue
             except Exception as e:
                 errs.append(f"{d}: cannot load the chart ({e}).")
@@ -1088,23 +1095,33 @@ class App(tk.Tk):
         self._redraw_vocals()
 
     def import_untitledcharts(self) -> None:
+        self._import_level("UntitledCharts", "an UntitledCharts level link", untitledcharts, "untitledcharts")
+
+    def import_ccarchive(self) -> None:
+        self._import_level("CC Archive", "a CC Archive chart link", ccarchive, "ccarchive")
+
+    def _import_level(self, site: str, link_kind: str, source: ModuleType, subdir: str) -> None:
+        """Import a level from a Sonolus site (untitledcharts / ccarchive): its chart, song, preview
+        and cover into builder/<subdir>/<name>, and its title, artists, author and rating."""
         url = simpledialog.askstring(
-            "Import from UntitledCharts",
-            f"Level link (e.g. {untitledcharts.LINK_EXAMPLE}):",
+            f"Import from {site}",
+            f"Level link (e.g. {source.LINK_EXAMPLE}):",
             parent=self,
         )
         if not url or not url.strip():
             return
         try:
-            name = untitledcharts.level_name(url)
+            name = source.level_name(url)
         except ValueError as e:
-            messagebox.showerror("Not an UntitledCharts level link", str(e))
+            messagebox.showerror(f"Not {link_kind}", str(e))
             return
-        folder = os.path.join(deps.HERE, "untitledcharts", name)
+        folder = os.path.join(deps.HERE, subdir, name)
+        page_of = getattr(source, "level_page", None)
+        page = page_of(name) if page_of else url.strip()
 
         import threading
 
-        self.status.set(f"Importing {name} from UntitledCharts…")
+        self.status.set(f"Importing {name} from {site}…")
         self.config(cursor="watch")
 
         def log(msg: str) -> None:
@@ -1112,7 +1129,7 @@ class App(tk.Tk):
 
         def worker() -> None:
             try:
-                level = untitledcharts.download_level(name, folder, log)
+                level = source.download_level(name, folder, log)
                 log("Checking the downloaded files…")
                 if not has_stream(level.bgm, "audio"):
                     raise ValueError("the song file has no audio stream")
@@ -1122,19 +1139,19 @@ class App(tk.Tk):
                 preview = fit_preview(level.preview or level.bgm, folder)
                 offset_ms = charts.offset_ms_for(charts.load_score(level.chart, strict=False))
             except Exception as e:
-                self.after(0, self._untitledcharts_failed, str(e))
+                self.after(0, self._import_failed, site, str(e))
                 return
-            self.after(0, self._untitledcharts_done, level, preview, offset_ms)
+            self.after(0, self._import_done, site, page, level, preview, offset_ms)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _untitledcharts_failed(self, msg: str) -> None:
+    def _import_failed(self, site: str, msg: str) -> None:
         self.config(cursor="")
-        self.status.set(f"UntitledCharts import failed: {(msg.splitlines() or [''])[0]}")
-        messagebox.showerror("UntitledCharts import failed", msg)
+        self.status.set(f"{site} import failed: {(msg.splitlines() or [''])[0]}")
+        messagebox.showerror(f"{site} import failed", msg)
 
-    def _untitledcharts_done(
-        self, level: untitledcharts.Level, preview: str, offset_ms: int
+    def _import_done(
+        self, site: str, page: str, level: untitledcharts.Level, preview: str, offset_ms: int
     ) -> None:
         self.config(cursor="")
         self._new_project()
@@ -1155,7 +1172,7 @@ class App(tk.Tk):
         self.chart_rows.append(row)
         self._redraw_charts()
         if self._update_combo(row) is not None:
-            self.status.set(f"Imported {level.title} from UntitledCharts.")
+            self.status.set(f"Imported {level.title} from {site}.")
         cut = (
             f"\n\nThe preview was cut to the first {MAX_PREVIEW_SECONDS:.0f}s of the "
             f"{'song' if not level.preview else 'level preview'}; replace it if you like."
@@ -1169,7 +1186,7 @@ class App(tk.Tk):
         )
         messagebox.showinfo(
             "Imported",
-            f"Imported '{level.title}' from {untitledcharts.level_page(level.name)}\n\n"
+            f"Imported '{level.title}' from {page}\n\n"
             f"Files saved to:\n{level.folder}{cut}{offset}\n\n"
             "Check the difficulty and level on the Charts tab, then fill in the remaining "
             "required metadata (Lyricist, Composer, Arranger, Vocals) before building.",
