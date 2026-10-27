@@ -48,6 +48,9 @@ Actions available:
 - Retry - automatically retries the current solo live immediately
 - Quit - automatically quits the current solo live immediately
 
+### Playback Speed
+Ability to modify playback speed in solo live.
+
 ## Rhythm Game Modifications
 Adds new features to the rhythm game.
 ### NXSK Level Format
