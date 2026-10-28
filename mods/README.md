@@ -1,7 +1,15 @@
 # Mods List
 GS6 is a sandbox for us to play around with modding the game in fun and silly ways. There will be utility mods, fun/silly joke mods.
 
-GS6 does not allow users to write their own mods. If you'd like a new mod (and it isn't insanely hard to make), create a Feature Request in issues, and if any assets are required, upload them there.
+If you'd like a new mod (and it isn't insanely hard to make), create a Feature Request in issues, and if any assets are required, upload them there.
+
+> To contribute a mod, write the mod for either GS6 or the main official game, using Frida. These mods should be contributed via Discord or in the Issues tab.
+> 
+> If a mod requires changes to API requests/responses you should include documentation on the changes required, or describe it (eg. "game must accept and respond to custom song live starts/ends and save data").
+> 
+> If you wish to add settings to the mod, simply write the mod to work with hardcoded settings instead of hooking the game's settings, and I can wire the settings into the game's Settings tab.
+> 
+> GS6 does not and will never allow cheat-like mods.
 
 ### Offline Sekai
 Makes PJSK offline. Rewrites important assetbundle processes to skip decluttering and downloads, as well as network checks.
@@ -52,7 +60,7 @@ Actions available:
 Ability to modify playback speed in solo live.
 
 ## Rhythm Game Modifications
-Adds new features to the rhythm game.
+Adds new features to the rhythm game. Full Chart Cyanvas parity has been reached.
 ### NXSK Level Format
 Adds support for the Next SEKAI Sonolus engine's LevelData format.
 

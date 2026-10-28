@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import codecs
 import gzip
-import io
 import json
 import os
 from typing import TYPE_CHECKING, Literal
@@ -55,12 +54,11 @@ def is_leveldata(head: bytes) -> bool:
 
 def leveldata_format(raw: bytes) -> ChartFormat:
     """Chart Cyanvas or Next SEKAI LevelData, by its archetypes (Next SEKAI when it can't tell)."""
-    from rg_converters.converters.LevelData import detect
+    from rg_converters import detect
 
     if raw.startswith(codecs.BOM_UTF8):
         raw = raw[len(codecs.BOM_UTF8) :]
-    kind = detect(raw, skip_gzip=raw[:2] != b"\x1f\x8b")
-    return "chart_cyanvas" if kind == "chcy" else "next_sekai"
+    return "chart_cyanvas" if "chart_cyanvas" in detect(raw) else "next_sekai"
 
 
 def chart_format(path: str) -> ChartFormat:
@@ -100,7 +98,8 @@ def load_score(path: str, strict: bool = True) -> Score:
     """Load any supported chart; `strict` only applies to LevelData."""
     ext = chart_ext(path)
     if ext in LEVELDATA_EXTS:
-        from rg_converters.converters.LevelData import chart_cyanvas, next_sekai
+        from rg_converters import UnsupportedFeatureError
+        from rg_converters.format.sonolus_leveldata import chart_cyanvas, next_sekai
 
         with open(path, "rb") as f:
             raw = f.read()
@@ -114,20 +113,23 @@ def load_score(path: str, strict: bool = True) -> Score:
         fmt = leveldata_format(raw)
         try:
             if fmt == "chart_cyanvas":
-                return chart_cyanvas.load(raw, error_on_unsupported_feature=strict)
-            return next_sekai.load(
+                return chart_cyanvas.loads(
+                    raw, chart_cyanvas.ImportOptions(error_on_unsupported_feature=strict)
+                )
+            return next_sekai.loads(
                 raw,
-                error_on_unsupported_feature=strict,
-                attempt_attached_note_convert=True,
+                next_sekai.ImportOptions(
+                    error_on_unsupported_feature=strict,
+                    attempt_attached_note_convert=True,
+                ),
             )
-        except (next_sekai.UnsupportedFeatureError, chart_cyanvas.UnsupportedFeatureError) as e:
+        except UnsupportedFeatureError as e:
             raise UnsupportedFeatures(path, _feature_lines(str(e)), fmt) from e
     fmt = chart_format(path)
 
-    from rg_converters.converters import sus, usc
+    from rg_converters.format import sus, usc
 
-    with open(path, "r", encoding="utf-8") as f:
-        return usc.load(f) if fmt == "usc" else sus.load(f)
+    return usc.load(path) if fmt == "usc" else sus.load(path)
 
 
 def note_count(score: Score) -> int:
@@ -146,17 +148,17 @@ def leveldata_text(score: Score, from_sus: bool = False) -> str:
 
     `from_sus` turns SUS guides into Next SEKAI guides: a smooth fade on their own layer.
     """
-    from rg_converters.converters.LevelData import next_sekai
+    from rg_converters.format.sonolus_leveldata import next_sekai
 
-    buf = io.BytesIO()
-    next_sekai.export(
-        buf,
+    data, _ = next_sekai.dumps(
         score,
-        as_compressed=False,
-        smooth_guide_fade=from_sus,
-        use_guide_layer=from_sus,
+        next_sekai.ExportOptions(
+            compressed=False,
+            smooth_guide_fade=from_sus,
+            use_guide_layer=from_sus,
+        ),
     )
-    return buf.getvalue().decode("utf-8")
+    return data.decode("utf-8")
 
 
 def chart_offset_seconds(score: Score) -> float:

@@ -538,13 +538,11 @@ def _compile_jacket(
 def _prepare_scores(
     chart_by_diff: dict[str, str], first_diff: str, lenient: set[str]
 ) -> dict[str, str]:
-    import io
-
-    import rg_converters as sc
     from rg_converters.core.bpm import Bpm
     from rg_converters.core.metadata import MetaData
     from rg_converters.core.score import Score
     from rg_converters.core.single import FeverChance, FeverStart, Skill
+    from rg_converters.format import sus
 
     events = (Skill, FeverStart, FeverChance)
 
@@ -570,15 +568,13 @@ def _prepare_scores(
         requests=["ticks_per_beat 480"],
     )
 
+    unshifted = sus.ExportOptions(skip_shift=True)
     info = Score(metadata=meta, notes=list(first_bpms) + list(first_events))
-    buf = io.StringIO()
-    sc.converters.sus.export(buf, info, skip_shift=True)
-    texts["info"] = _normalize_sus(buf.getvalue())
+    texts["info"] = _normalize_sus(sus.dumps(info, unshifted)[0])
 
     chart_diffs = set(chart_by_diff)
-    buf = io.StringIO()
-    sc.converters.sus.export(buf, Score(metadata=meta, notes=list(first_bpms)), skip_shift=True)
-    empty = _normalize_sus(buf.getvalue())
+    empty_score = Score(metadata=meta, notes=list(first_bpms))
+    empty = _normalize_sus(sus.dumps(empty_score, unshifted)[0])
     for diff in ("easy", "normal", "hard", "expert", "master", "append"):
         if diff not in chart_diffs:
             texts[diff] = empty
