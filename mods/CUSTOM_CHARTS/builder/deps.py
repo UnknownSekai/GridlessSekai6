@@ -12,7 +12,7 @@ BASES = os.path.join(HERE, "bases")
 # (pip name, import name, minimum version); keep in sync with requirements.txt
 PACKAGES: list[tuple[str, str, tuple[int, ...] | None]] = [
     ("Pillow", "PIL", None),
-    ("rg-converters", "rg_converters", (2, 2, 1)),
+    ("rg-converters", "rg_converters", (2, 2, 2)),
     ("UnityPy", "UnityPy", None),
     ("cricodecs", "cricodecs", (1, 2, 0)),
 ]
