@@ -2,7 +2,7 @@
 > [!IMPORTANT]
 > **DO NOT EXTRACT the zip.**
 
-# UNOFFICIAL FAN-MADE GUIDE CAN BE FOUND HERE: https://patchednexus.win/glsk/6
+# UNOFFICIAL FAN-MADE GUIDE CAN BE FOUND HERE: https://crafties.us/gs/6
 > [!IMPORTANT]
 > We do NOT provide help or support for installing GridlessSekai 6 beyond these instructions. Do not open any Issues to ask for help, unless it is a bug.
 
