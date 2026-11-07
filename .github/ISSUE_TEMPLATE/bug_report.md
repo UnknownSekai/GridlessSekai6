@@ -34,6 +34,7 @@ If applicable, add screenshots to help explain your problem.
 **GS6 Version:**
 
 **Checklist:**
+Please insert a lowercase x into the brackets and remove the spaces like this: `[x]` to check a box.
 - [ ] I have searched existing issues to ensure this is not a duplicate.
 - [ ] I am using the latest release.
 - [ ] I checked all of these without reading them (don't check this!).
